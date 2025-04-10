@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="manifest" href="manifest.json" />
+	<meta name="theme-color" content="#4f46e5" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Controle MEI</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: sans-serif;
+      background: #f9fafb;
+      margin: 0;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      background: #fff;
+      width: 100%;
+      max-width: 400px;
+      padding: 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 1rem;
+      font-size: clamp(1.2rem, 4vw, 1.5rem);
+      color: #333;
+    }
+
+    .progress-container {
+      background: #eee;
+      border-radius: 20px;
+      height: 10px;
+      margin-bottom: 0.5rem;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      transition: width 0.4s;
+    }
+
+    .info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #666;
+      margin-bottom: 1rem;
+    }
+
+    input, select, button {
+      padding: 0.75rem;
+      font-size: 1rem;
+      margin-bottom: 0.75rem;
+      border-radius: 6px;
+    }
+
+    input, select {
+      width: 100%;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      width: 100%;
+      background: #4f46e5;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:nth-of-type(2) {
+      background: #10b981;
+    }
+
+    .entry {
+      background: #f1f5f9;
+      padding: 0.5rem;
+      border-radius: 8px;
+      margin-bottom: 0.4rem;
+      font-size: 0.9rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .entry:hover {
+      background: #e2e8f0;
+    }
+
+    .entry small {
+      display: block;
+      font-size: 0.75rem;
+      color: #888;
+    }
+
+    #historico {
+      max-height: 300px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Faturamento MEI</h1>
+
+    <div class="progress-container">
+      <div id="progressBar" class="progress-bar" style="width: 0%; background: green;"></div>
+    </div>
+    <div class="info">
+      <span id="valorAtual">R$ 0,00</span>
+      <span>Limite: R$ 6.750</span>
+      <span id="restante">R$ 6.750</span>
+    </div>
+
+    <input type="text" id="valor" placeholder="Valor (R$)" inputmode="numeric" />
+    <select id="metodo">
+      <option value="pix">Pix</option>
+      <option value="app">App</option>
+      <option value="dinheiro">Dinheiro</option>
+    </select>
+    <button onclick="adicionarGanho()">Adicionar</button>
+    <button onclick="gerarPDF()">Gerar PDF</button>
+
+    <h3 style="margin-top: 1rem; font-size: 1rem;">Ganhos registrados</h3>
+    <div id="historico"></div>
+  </div>
+
+  <script>
+    const limiteMensal = 6750;
+    const historicoEl = document.getElementById('historico');
+    const progressoEl = document.getElementById('progressBar');
+    const valorAtualEl = document.getElementById('valorAtual');
+    const restanteEl = document.getElementById('restante');
+    const inputValor = document.getElementById('valor');
+
+    let ganhos = JSON.parse(localStorage.getItem('mei-ganhos')) || [];
+
+    function atualizarUI() {
+      historicoEl.innerHTML = '';
+      let totalDeclarado = 0;
+
+      ganhos.forEach((g, index) => {
+        if (g.metodo !== 'dinheiro') totalDeclarado += g.valor;
+
+        const div = document.createElement('div');
+        div.className = 'entry';
+        div.innerHTML = `
+          <div>
+            ${g.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} - ${g.metodo}
+            <small>${g.data}</small>
+          </div>
+        `;
+        div.onclick = () => {
+          if (confirm("Deseja remover este ganho?")) {
+            removerGanho(index);
+          }
+        };
+        historicoEl.appendChild(div);
+      });
+
+      valorAtualEl.textContent = totalDeclarado.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+      });
+
+      restanteEl.textContent = (limiteMensal - totalDeclarado).toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+      });
+
+      const porcentagem = Math.min((totalDeclarado / limiteMensal) * 100, 100);
+      progressoEl.style.width = `${porcentagem}%`;
+      progressoEl.style.background = porcentagem > 75 ? 'red' : porcentagem > 50 ? 'orange' : 'green';
+    }
+
+    function adicionarGanho() {
+      const valorStr = inputValor.value.replace(/[^\d]/g, '');
+      const valor = parseFloat(valorStr) / 100;
+      const metodo = document.getElementById('metodo').value;
+
+      if (!valor || valor <= 0) return;
+
+      const data = new Date().toLocaleString();
+      ganhos.push({ valor, metodo, data });
+      localStorage.setItem('mei-ganhos', JSON.stringify(ganhos));
+      inputValor.value = '';
+      atualizarUI();
+    }
+
+    function removerGanho(index) {
+      ganhos.splice(index, 1);
+      localStorage.setItem('mei-ganhos', JSON.stringify(ganhos));
+      atualizarUI();
+    }
+
+    inputValor.addEventListener('input', () => {
+      let v = inputValor.value.replace(/\D/g, '');
+      if (!v) v = '0';
+      let valorFloat = parseFloat(v) / 100;
+
+      inputValor.value = valorFloat.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+      });
+    });
+
+    async function gerarPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      let y = 20;
+
+      doc.setFontSize(16);
+      doc.text("Relatório de Ganhos MEI", 105, y, { align: "center" });
+      y += 10;
+
+      doc.setFontSize(12);
+      doc.text(`Data: ${new Date().toLocaleDateString("pt-BR")}`, 10, y);
+      y += 10;
+
+      let total = 0;
+
+      ganhos.forEach((g, i) => {
+        const valor = g.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        const linha = `${i + 1}. ${valor} - ${g.metodo} - ${g.data}`;
+        doc.text(linha, 10, y);
+        y += 8;
+        if (g.metodo !== 'dinheiro') total += g.valor;
+
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+      });
+
+      const restante = limiteMensal - total;
+      const porcentagem = (total / limiteMensal) * 100;
+
+      y += 10;
+      doc.setFontSize(13);
+      doc.text("Resumo:", 10, y);
+      y += 8;
+      doc.setFontSize(12);
+      doc.text(`Total declarado: ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`, 10, y);
+      y += 7;
+      doc.text(`Total restante: ${restante.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`, 10, y);
+      y += 7;
+      doc.text(`Porcentagem utilizada: ${porcentagem.toFixed(2)}%`, 10, y);
+      y += 7;
+
+      let status = '';
+      if (porcentagem <= 50) {
+        status = "🟢 Dentro do limite";
+      } else if (porcentagem <= 75) {
+        status = "🟠 Atenção: mais da metade usada";
+      } else {
+        status = "🔴 Alerta: limite quase ou já estourado";
+      }
+
+      doc.text(`Status: ${status}`, 10, y);
+
+      const nomeArquivo = `Relatorio_MEI_${new Date().toLocaleDateString("pt-BR").replace(/\//g, "-")}.pdf`;
+      doc.save(nomeArquivo);
+    }
+
+    atualizarUI();
+	if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js')
+    .then(() => console.log('Service Worker registrado!'));
+}
+
+  </script>
+</body>
+</html>
