@@ -152,3 +152,8 @@ input:checked + .slider {
 input:checked + .slider:before {
   transform: translateX(36px);
 }
+button#limparDados {
+  background: #ef4444;
+  color: white;
+  margin-top: 0.5rem;
+}

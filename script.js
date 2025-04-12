@@ -136,4 +136,12 @@ filtroCheckbox.addEventListener('change', () => {
   atualizarUI();
 });
 
+document.getElementById('limparDados').addEventListener('click', () => {
+  if (confirm("Tem certeza que deseja apagar todos os dados? Isso não pode ser desfeito!")) {
+    localStorage.removeItem('mei-ganhos');
+    ganhos = [];
+    atualizarUI();
+  }
+});
+
 
